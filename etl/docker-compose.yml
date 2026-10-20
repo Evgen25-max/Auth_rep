@@ -23,26 +23,48 @@ services:
       - static_data:/var/www/static:ro
       - media_data:/var/www/media:ro
     depends_on:
-      - service
+      service:
+        condition: service_started
+      fastapi:
+        condition: service_started
+      auth-service:
+        condition: service_started
     ports:
       - "80:80"
       - "8000:8000"
     restart: unless-stopped
-
 
   theatre-db:
     image: postgres:17-alpine
     restart: always
     env_file:
       - ./.env
+    ports:
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data/
-      - ./database_dump.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./db-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 5
+
+  #theatre-db:
+   # image: postgres:17-alpine
+  #  restart: always
+  #  env_file:
+   #   - ./.env
+  #  ports:
+  #    - "5432:5432"
+  #  volumes:
+  #    - postgres_data:/var/lib/postgresql/data/
+  #    - ./db-init:/docker-entrypoint-initdb.d:ro
+  #  healthcheck:
+  #    test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+   #   interval: 5s
+    #  timeout: 5s
+    #  retries: 5
 
 
   elasticsearch:
@@ -90,7 +112,7 @@ services:
       - default
       - elastic
     restart: unless-stopped
-   
+
   fastapi:
     build: ./fastapi
     image: fastapi-image
@@ -107,7 +129,24 @@ services:
       - default
       - elastic
     restart: always
-    
+
+  auth-service:
+     build: ./auth-service
+     expose:
+       - "8000"
+     env_file:
+       - ./.env
+     volumes:
+       - auth_logs:/opt/app/log 
+     depends_on:
+       theatre-db:
+         condition: service_healthy
+       redis:
+         condition: service_healthy
+     networks:
+       - default
+     restart: unless-stopped
+
   redis:
     image: redis:7-alpine
     command: >
@@ -117,6 +156,8 @@ services:
       --maxmemory 512mb
       --maxmemory-policy allkeys-lru
       --appendonly no
+    ports:
+      - "6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -125,7 +166,7 @@ services:
       timeout: 5s
       retries: 5
     restart: always
-    
+
 volumes:
   postgres_data:
   static_data:
@@ -135,6 +176,7 @@ volumes:
   etl_state:
   redis_data:
   fastapi_logs:
+  auth_logs:
 
 networks:
   elastic:
