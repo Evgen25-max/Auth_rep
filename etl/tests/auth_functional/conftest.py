@@ -1,6 +1,7 @@
 import uuid
-
+import hashlib
 import aiohttp
+import asyncio
 import asyncpg
 import pytest_asyncio
 import redis.asyncio as redis
@@ -31,14 +32,14 @@ SYSTEM_ROLES = [
     ),
 ]
 
-
-def hash_password(password: str) -> str:
+async def hash_password(password: str) -> str:
     """
-    Хеш пароля так же, как это делает auth-service.
-    Обязательно используем тот же PASSWORD_PEPPER.
+    Асинхронно хеширует пароль так же, как это делает auth-service.
+    Обязательно используем тот же PASSWORD_PEPPER и SHA-256.
     """
     password_with_pepper = f'{password}{test_settings.password_pepper}'
-    return pwd_context.hash(password_with_pepper)
+    sha256_hash = hashlib.sha256(password_with_pepper.encode('utf-8')).hexdigest()
+    return await asyncio.to_thread(pwd_context.hash, sha256_hash)
 
 
 async def reset_auth_db(conn: asyncpg.Connection) -> None:
@@ -165,7 +166,7 @@ async def admin_token(
     login = 'admin'
     password = 'AdminPass123!'
 
-    hashed = hash_password(password)
+    hashed = await hash_password(password)
 
     await clean_db.execute(f"""
         INSERT INTO {schema}.users (

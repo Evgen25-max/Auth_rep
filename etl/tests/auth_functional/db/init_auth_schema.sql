@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS users (
     first_name      varchar(50),
     last_name       varchar(50),
     is_superuser    boolean NOT NULL DEFAULT false,
+    token_version INTEGER NOT NULL DEFAULT 1,
     created_at      timestamptz NOT NULL DEFAULT now(),
     CONSTRAINT uq_users_login UNIQUE (login)
 );

@@ -12,6 +12,7 @@ from db_work.postgres_rbac import PostgresRBACRepository
 from fastapi import Depends
 from models.auth_models import Permission, Role
 from redis.asyncio import Redis
+from redis.exceptions import RedisError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.custom_exception import (PermissionNotFoundError,
@@ -59,17 +60,28 @@ class RBACService:
             description=description,
             permissions=perms_to_add
         )
-
+        await self._session.commit()
         logger.info('Создана роль %s (id=%s) с правами: %s', role.name, role.id, [p.codename for p in perms_to_add])
         return role
 
     @handle_storage_errors
     async def delete_role(self, role_id: UUID) -> bool:
+        """
+        Удаляет роль и сбрасывает кэш прав у всех пользователей,
+        которым она была назначена.
+        """
+        affected_user_ids = await self._repo.get_users_by_role_id(role_id)
         deleted = await self._repo.delete_role(role_id)
         if not deleted:
             raise RoleNotFoundError(str(role_id))
-
-        logger.info('Удалена роль id=%s', role_id)
+        await self._session.commit()
+        for user_id in affected_user_ids:
+            await self.invalidate_user_perms_cache(user_id)
+        logger.info(
+            'Удалена роль id=%s, сброшен кэш прав у %d пользователей',
+            role_id,
+            len(affected_user_ids),
+        )
         return True
 
     @handle_storage_errors
@@ -77,7 +89,7 @@ class RBACService:
         return await self._repo.list_roles()
 
     @handle_storage_errors
-    async def assign_role_to_user(self, user_id: UUID, role_name: str) -> None:
+    async def assign_role_to_user(self, user_id: UUID, role_name: str, commit: bool = True) -> None:
         role = await self._repo.get_role_by_name(role_name)
         if role is None:
             raise RoleNotFoundError(role_name)
@@ -86,8 +98,11 @@ class RBACService:
         await self.invalidate_user_perms_cache(user_id)
         logger.info('Пользователю %s назначена роль %s', user_id, role_name)
 
+        if commit:
+            await self._session.commit()
+
     @handle_storage_errors
-    async def remove_role_from_user(self, user_id: UUID, role_name: str) -> None:
+    async def remove_role_from_user(self, user_id: UUID, role_name: str, commit: bool = True) -> None:
         role = await self._repo.get_role_by_name(role_name)
         if role is None:
             raise RoleNotFoundError(role_name)
@@ -95,6 +110,9 @@ class RBACService:
         await self._repo.remove_role_from_user(user_id=user_id, role_id=role.id)
         await self.invalidate_user_perms_cache(user_id)
         logger.info('У пользователя %s отозвана роль %s', user_id, role_name)
+
+        if commit:
+            await self._session.commit()
 
     @handle_storage_errors
     async def add_permission_to_role(self, role_name: str, perm_codename: str) -> None:
@@ -144,11 +162,12 @@ class RBACService:
         return codename in perms
 
     async def invalidate_user_perms_cache(self, user_id: UUID) -> None:
-        """Удаляет кэш прав пользователя (вызывается при изменении ролей)."""
+        """Сбрасывает кэш прав одного пользователя. Ошибки Redis логирует, но не роняет запрос."""
         cache_key = f'{PERMS_CACHE_PREFIX}:{user_id}'
         try:
             await self._redis.delete(cache_key)
         except RedisError as e:
+            # Пункт 8: не падаем, кэш сам умрёт по TTL (максимум 15 минут)
             logger.warning('Не удалось очистить кэш прав для %s: %s', user_id, e)
 
     @handle_storage_errors

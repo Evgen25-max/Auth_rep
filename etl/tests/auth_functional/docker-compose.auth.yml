@@ -19,26 +19,19 @@ services:
     networks:
       - auth_test_net
 
-  redis:
-    image: redis:7-alpine
+  auth-redis:
+    image: redis:7.2-alpine
     command: >
       redis-server
-      --requirepass ${REDIS_PASSW:-test-redis-pass}
-      --maxmemory 256mb
-      --maxmemory-policy allkeys-lru
-      --appendonly no
+      --port 6379
+      --requirepass ${REDIS_AUTH_PASSW:-test-auth-redis-pass}
+      --maxmemory 128mb
+      --maxmemory-policy noeviction
     healthcheck:
-      test:
-        [
-          "CMD",
-          "redis-cli",
-          "-a",
-          "${REDIS_PASSW:-test-redis-pass}",
-          "ping"
-        ]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_AUTH_PASSW:-test-auth-redis-pass}", "ping"]
       interval: 5s
       timeout: 5s
-      retries: 20
+      retries: 5
     networks:
       - auth_test_net
 
@@ -55,19 +48,19 @@ services:
       POSTGRES_AUTH_DB: ${POSTGRES_AUTH_DB:-auth_service_db}
       POSTGRES_AUTH_SCHEMA: ${POSTGRES_AUTH_SCHEMA:-auth}
 
-      # Для тестов упрощаем: runtime-пользователь = владелец схемы.
-      # В проде лучше держать отдельные auth_admin и auth_app.
       POSTGRES_AUTH_APP_USER: ${POSTGRES_AUTH_USER:-auth_admin}
       POSTGRES_AUTH_APP_PASSWORD: ${POSTGRES_AUTH_PASSWORD:-secret}
 
       POSTGRES_ECHO: "false"
 
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      REDIS_PASSW: ${REDIS_PASSW:-test-redis-pass}
+      # === ИСПРАВЛЕНО: Имена переменных теперь точно совпадают с core/config.py ===
+      REDIS_AUTH_HOST: auth-redis
+      REDIS_AUTH_PORT: 6379
+      REDIS_AUTH_PASSW: ${REDIS_AUTH_PASSW:-test-auth-redis-pass}
       REDIS_AUTH_DB: 1
       REDIS_CONNECT_TIMEOUT: 5
       REDIS_SOCKET_TIMEOUT: 5
+      # ============================================================================
 
       JWT_SECRET_KEY: test-jwt-secret-key-for-functional-tests
       JWT_ALGORITHM: HS256
@@ -81,7 +74,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
+      auth-redis:
         condition: service_healthy
 
     healthcheck:
@@ -105,6 +98,7 @@ services:
     environment:
       SERVICE_URL: http://auth-service:8001
 
+      # Настройки БД (должны совпадать с test_settings в conftest.py)
       TEST_POSTGRES_HOST: postgres
       TEST_POSTGRES_PORT: 5432
       TEST_POSTGRES_USER: ${POSTGRES_AUTH_USER:-auth_admin}
@@ -112,9 +106,10 @@ services:
       TEST_POSTGRES_DB: ${POSTGRES_AUTH_DB:-auth_service_db}
       TEST_AUTH_SCHEMA: ${POSTGRES_AUTH_SCHEMA:-auth}
 
-      TEST_REDIS_HOST: redis
+      # Настройки Redis (имена должны совпадать с conftest.py, но значения вести на auth-redis)
+      TEST_REDIS_HOST: auth-redis
       TEST_REDIS_PORT: 6379
-      TEST_REDIS_PASSW: ${REDIS_PASSW:-test-redis-pass}
+      TEST_REDIS_PASSW: ${REDIS_AUTH_PASSW:-test-auth-redis-pass}
       TEST_REDIS_DB: 1
 
       PASSWORD_PEPPER: test-password-pepper-for-functional-tests

@@ -55,11 +55,10 @@ class AuthService:
 
     @handle_storage_errors
     async def signup(self, data: UserCreate) -> UserPublic:
-        """Создает нового пользователя и назначает ему базовую роль 'user'."""
         if await self._users.get_by_login(data.login):
             raise UserAlreadyExistsError(data.login)
 
-        hashed_pw = hash_password(data.password)
+        hashed_pw = await hash_password(data.password)
 
         user = await self._users.create(
             login=data.login,
@@ -70,18 +69,17 @@ class AuthService:
         )
 
         try:
-            await self._rbac.assign_role_to_user(user.id, 'user')
+            await self._rbac.assign_role_to_user(user.id, 'user', commit=False)
         except Exception as e:
-            logger.error('Не удалось назначить роль новому пользователю %s: %s', user.id, e)
+            await self._session.rollback()
+            logger.error('Не удалось назначить роль: %s', e)
             raise
 
-        fresh_user = await self._users.get_by_id(user.id)
-        if fresh_user is None:
-            raise UserNotFoundError(str(user.id))
+        await self._session.commit()
 
-        logger.info('Зарегистрирован пользователь %s', fresh_user.login)
-
-        return UserPublic.model_validate(fresh_user)
+        await self._session.refresh(user, ['roles'])
+        logger.info('Зарегистрирован пользователь %s', user.login)
+        return UserPublic.model_validate(user)
 
     @handle_storage_errors
     async def login(self, data: UserLogin, ip: str | None, ua: str | None) -> TokenPair:
@@ -91,12 +89,12 @@ class AuthService:
         success = False
         user_id_for_history = None
 
-        if user and verify_password(data.password, user.hashed_password):
+        if user and await verify_password(data.password, user.hashed_password):
             success = True
             user_id_for_history = user.id
 
-            access_token = create_access_token(str(user.id), user.is_superuser)
-            refresh_token = create_refresh_token(str(user.id), user.is_superuser)
+            access_token = create_access_token(str(user.id), user.is_superuser, version=user.token_version)
+            refresh_token = create_refresh_token(str(user.id), user.is_superuser, version=user.token_version)
 
             refresh_payload = decode_token(refresh_token)
             ttl = _get_ttl_seconds(refresh_payload['exp'])
@@ -156,9 +154,8 @@ class AuthService:
 
         old_ttl = _get_ttl_seconds(payload['exp'])
         await self._redis.setex(f'{BLACKLIST_PREFIX}:{jti}', old_ttl, '1')
-
-        new_access = create_access_token(str(user.id), user.is_superuser)
-        new_refresh = create_refresh_token(str(user.id), user.is_superuser)
+        new_access = create_access_token(str(user.id), user.is_superuser, version=user.token_version)
+        new_refresh = create_refresh_token(str(user.id), user.is_superuser, version=user.token_version)
 
         new_refresh_payload = decode_token(new_refresh)
         new_ttl = _get_ttl_seconds(new_refresh_payload['exp'])
@@ -219,7 +216,7 @@ class AuthService:
         if sensitive_change:
             if not current_password:
                 raise InvalidCredentialsError()
-            if not verify_password(current_password, user.hashed_password):
+            if not await verify_password(current_password, user.hashed_password):
                 raise InvalidCredentialsError()
 
         if login and login != user.login:
@@ -228,7 +225,9 @@ class AuthService:
             user.login = login
 
         if password:
-            user.hashed_password = hash_password(password)
+            user.hashed_password = await hash_password(password)
+        user.token_version += 1
+        await self._redis.delete(f'{REFRESH_ACTIVE_PREFIX}:{user.id}')
 
         if first_name is not None:
             user.first_name = first_name
@@ -266,3 +265,4 @@ async def get_auth_service(
         history_repo=history_repo,
         redis=redis,
     )
+

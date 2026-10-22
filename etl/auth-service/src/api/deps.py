@@ -92,16 +92,28 @@ async def get_current_user_id(payload: dict = Depends(get_token_payload)) -> UUI
 
 
 async def get_current_user(
-    user_id: UUID = Depends(get_current_user_id),
+    payload: dict = Depends(get_token_payload),
     session: AsyncSession = Depends(get_session),
 ) -> User:
     """Получает объект User из БД."""
+    try:
+        user_id = UUID(payload['sub'])
+    except (ValueError, KeyError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail='Некорректный user_id в токене',
+        )
     repo = PostgresUserRepository(session)
     user = await repo.get_by_id(user_id)
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail='Пользователь не найден',
+        )
+    if int(payload.get('ver', 1)) != user.token_version:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail='Сессия недействительна: пароль был изменён',
         )
     return user
 
@@ -129,7 +141,6 @@ def require_permission(permission_codename: str):
                 logger.debug('Permissions loaded from CACHE for user %s: %s', user.id, perms_set)
         except Exception as e:
             logger.warning('Redis error while getting cache: %s', e)
-
 
         if perms_set is None:
             rbac_repo = PostgresRBACRepository(session)

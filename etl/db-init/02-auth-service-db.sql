@@ -65,13 +65,14 @@ SELECT format('SET search_path = %I, public', :'auth_schema')
 
 -- 5. Таблица пользователей (С полем is_superuser)
 CREATE TABLE IF NOT EXISTS users (
-    id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    login           varchar(255) NOT NULL,
-    hashed_password varchar(255) NOT NULL,
-    first_name      varchar(50),
-    last_name       varchar(50),
-    is_superuser    boolean NOT NULL DEFAULT false,
-    created_at      timestamptz NOT NULL DEFAULT now()
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    login VARCHAR(255) UNIQUE NOT NULL,
+    hashed_password VARCHAR(255) NOT NULL,
+    first_name VARCHAR(50),
+    last_name VARCHAR(50),
+    is_superuser BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    token_version INTEGER NOT NULL DEFAULT 1  -- <=== ДОБАВЬТЕ ЭТУ СТРОКУ
 );
 
 -- 6. Таблица ролей

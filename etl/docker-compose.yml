@@ -14,7 +14,6 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-
   nginx:
     image: nginx:latest
     volumes:
@@ -50,23 +49,6 @@ services:
       timeout: 5s
       retries: 5
 
-  #theatre-db:
-   # image: postgres:17-alpine
-  #  restart: always
-  #  env_file:
-   #   - ./.env
-  #  ports:
-  #    - "5432:5432"
-  #  volumes:
-  #    - postgres_data:/var/lib/postgresql/data/
-  #    - ./db-init:/docker-entrypoint-initdb.d:ro
-  #  healthcheck:
-  #    test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-   #   interval: 5s
-    #  timeout: 5s
-    #  retries: 5
-
-
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.6.2
     environment:
@@ -84,7 +66,6 @@ services:
       interval: 10s
       timeout: 10s
       retries: 5
-
 
   kibana:
     image: docker.elastic.co/kibana/kibana:8.6.2
@@ -131,21 +112,21 @@ services:
     restart: always
 
   auth-service:
-     build: ./auth-service
-     expose:
-       - "8000"
-     env_file:
-       - ./.env
-     volumes:
-       - auth_logs:/opt/app/log 
-     depends_on:
-       theatre-db:
-         condition: service_healthy
-       redis:
-         condition: service_healthy
-     networks:
-       - default
-     restart: unless-stopped
+    build: ./auth-service
+    expose:
+      - "8000"
+    env_file:
+      - ./.env
+    volumes:
+      - auth_logs:/opt/app/log
+    depends_on:
+      theatre-db:
+        condition: service_healthy
+      auth-redis:
+        condition: service_healthy
+    networks:
+      - default
+    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
@@ -165,6 +146,29 @@ services:
       interval: 6s
       timeout: 5s
       retries: 5
+    networks:
+      - default
+    restart: always
+
+  auth-redis:
+    image: redis:7.2-alpine
+    command: >
+      redis-server
+      --port 6379
+      --requirepass ${REDIS_AUTH_PASSW}
+      --maxmemory 128mb
+      --maxmemory-policy noeviction
+    environment:
+      - REDIS_PASSWORD=${REDIS_AUTH_PASSW}
+    volumes:
+      - auth_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_AUTH_PASSW}", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - default
     restart: always
 
 volumes:
@@ -177,7 +181,10 @@ volumes:
   redis_data:
   fastapi_logs:
   auth_logs:
+  auth_redis_data:
 
 networks:
+  default:
+    driver: bridge
   elastic:
     driver: bridge

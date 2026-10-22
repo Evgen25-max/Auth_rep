@@ -3,8 +3,8 @@ import uuid
 from datetime import datetime
 
 from db.postgres import Base
-from sqlalchemy import (Boolean, DateTime, ForeignKey, String, Text,
-                        UniqueConstraint, func)
+from sqlalchemy import (Boolean, DateTime, ForeignKey, String, Text, text,
+                        UniqueConstraint, func, Integer)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -38,6 +38,7 @@ class User(Base):
         secondary=f'{SCHEMA}.user_roles',
         back_populates='users', lazy='selectin',
     )
+    token_version: Mapped[int] = mapped_column(Integer, default=1, server_default=text('1'))
 
 
 class Role(Base):

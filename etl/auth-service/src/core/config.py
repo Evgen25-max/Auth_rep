@@ -28,14 +28,14 @@ class Settings(BaseSettings):
     POSTGRES_AUTH_APP_USER: str = 'auth_app'
     POSTGRES_AUTH_APP_PASSWORD: str = 'secret'
 
-    REDIS_HOST: str = '127.0.0.1'
-    REDIS_PORT: int = 6379
-    REDIS_PASSW: str | None = None
+    REDIS_AUTH_HOST: str = 'auth-redis'
+    REDIS_AUTH_PORT: int = 6379
+    REDIS_AUTH_PASSW: str | None = None
     REDIS_AUTH_DB: int = 1
     REDIS_CONNECT_TIMEOUT: int = 5
     REDIS_SOCKET_TIMEOUT: int = 5
 
-    JWT_SECRET_KEY: str = 'change-me-in-prod'
+    JWT_SECRET_KEY: str
     JWT_ALGORITHM: str = 'HS256'
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7

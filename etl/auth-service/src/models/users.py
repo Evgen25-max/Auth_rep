@@ -7,7 +7,7 @@ class UserCreate(BaseModel):
     """Регистрация."""
 
     login: str = Field(..., min_length=3, max_length=255)
-    password: str = Field(..., min_length=8, max_length=72)
+    password: str = Field(..., min_length=8, max_length=256)
     first_name: str = Field(..., max_length=50)
     last_name: str = Field(..., max_length=50)
 
@@ -22,7 +22,7 @@ class UserLogin(BaseModel):
 class UserUpdate(BaseModel):
     current_password: str | None = None
     login: str | None = Field(None, min_length=3, max_length=255)
-    password: str | None = Field(None, min_length=8, max_length=72)
+    password: str | None = Field(None, min_length=8, max_length=256)
     first_name: str | None = Field(None, max_length=50)
     last_name: str | None = Field(None, max_length=50)
 

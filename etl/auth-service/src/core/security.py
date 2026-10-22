@@ -1,10 +1,10 @@
-
+import hashlib
 import uuid
 from datetime import datetime, timedelta, timezone
 
 import jwt
 from passlib.context import CryptContext
-
+import asyncio
 from core.config import config
 
 TOKEN_TYPE_ACCESS = 'access'
@@ -12,26 +12,22 @@ TOKEN_TYPE_REFRESH = 'refresh'
 
 pwd_context = CryptContext(schemes=['bcrypt'], deprecated='auto')
 
-
-def hash_password(password: str) -> str:
-    """
-    Возвращает хеш пароля с Pepper.
-    """
+async def hash_password(password: str) -> str:
+    """Асинхронно хеширует пароль, вынося bcrypt в отдельный поток."""
     password_with_pepper = f"{password}{config.PASSWORD_PEPPER}"
-    return pwd_context.hash(password_with_pepper)
+    sha256_hash = hashlib.sha256(password_with_pepper.encode('utf-8')).hexdigest()
+
+    # Выносим блокирующую операцию bcrypt в поток
+    return await asyncio.to_thread(pwd_context.hash, sha256_hash)
 
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """
-    Проверяет соответствие введенного пароля сохраненному хешу.
-    """
+async def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Асинхронно проверяет пароль, вынося bcrypt в отдельный поток."""
     password_with_pepper = f"{plain_password}{config.PASSWORD_PEPPER}"
-    return pwd_context.verify(password_with_pepper, hashed_password)
+    sha256_hash = hashlib.sha256(password_with_pepper.encode('utf-8')).hexdigest()
 
-def get_password_hash(password: str) -> str:
-    """Хеширует пароль с добавлением секрета (pepper)."""
-    password_with_pepper = f"{password}{config.PASSWORD_PEPPER}"
-    return pwd_context.hash(password_with_pepper)
+    # Выносим блокирующую операцию проверки в поток
+    return await asyncio.to_thread(pwd_context.verify, sha256_hash, hashed_password)
 
 
 def _create_token(
