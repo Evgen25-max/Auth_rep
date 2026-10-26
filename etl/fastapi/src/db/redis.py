@@ -13,6 +13,7 @@ def init_redis() -> None:
     redis = Redis(
         host=config.REDIS_HOST,
         port=config.REDIS_PORT,
+        db=config.REDIS_CACHE_DB,
         password=config.REDIS_PASSW,
         socket_connect_timeout=config.REDIS_CONNECT_TIMEOUT,
         socket_timeout=config.REDIS_SOCKET_TIMEOUT,

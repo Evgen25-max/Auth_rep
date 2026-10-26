@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     REDIS_HOST: str = '127.0.0.1'
     REDIS_PORT: int = 6379
     REDIS_PASSW: str | None = None
+    REDIS_CACHE_DB: int = 0
 
     ES_MAX_RETRIES: int = 3
     ES_REQUEST_TIMEOUT: int = 30

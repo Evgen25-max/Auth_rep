@@ -1,2 +1,18 @@
-cd etl/tests/functional
-sudo docker compose --env-file ../../.env up --build --abort-on-container-exit tests
+Мда. Здесь процентов 70 того что по мне следовало бы сделать.
+Сильно конечно прыгает объём работы от спринта к спринту. Доп задание не успеваю. Допилим по ходу.
+Тут кончено и сервисы нужно дружить, и токены обновлять за спиной и т.д.
+
+
+Ладно, насыпайте)
+
+
+
+Создание суперюзера сервиса auth-service
+sudo docker compose exec auth-service python manage.py create-superadmin
+
+Тесты
+cd Auth_rep/etl/tests/auth_functional
+sudo docker compose --env-file ../../.env -f docker-compose.auth.yml up --build --abort-on-container-exit tests
+Сброс тестов
+sudo docker compose -f docker-compose.auth.yml down -v
+build --no-cache
